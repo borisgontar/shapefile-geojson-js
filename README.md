@@ -6,7 +6,7 @@ This module reads a stream in the [ESRI Shapefile](https://www.esri.com/content/
 format and transorms it into a stream of
 [GeoJSON](https://datatracker.ietf.org/doc/html/rfc7946) Feature objects
 containing source geometries. If a projection data is provided,
-the geometry coordinates are replaced by the WGS84 longitudes and latitudes.
+the geometry coordinates are replaced by longitudes and latitudes.
 If an accompanying stream in [dBASE](https://en.wikipedia.org/wiki/.dbf) format is provided,
 it is used to populate feature properties.
 
@@ -18,15 +18,37 @@ is recommended.
 The generated GeoJSON is as valid as the source data.
 In particular the module relies on the correct winding order
 of polygon outer rings and holes.
-
-The generated GeoJSON is fully compliant with RFC7946, including corrent
-winding order of polygon rings and antimeridian cutting.
-Shapefile's records with null shape are transformed into
+Shapefile records with null shape are transformed into
 features with null geometries.
 
 For a command line converter, go [here](#command-line-tool).
 
-## Examples for Node.js
+## Examples
+
+First, create ReadableStreams for your data:
+```js
+const shpStream = get ReadableStream somehow;
+const dbfStream = get ReadableStream somehow;
+```
+Then you need to know the projection of coordinates stored in the SHP
+data and encoding of the text fields of the DBF records:
+```js
+const prjwkt = 'EPSG:3857';
+const encoding = 'windows-1251';
+```
+Pipe the data into the module's transform streams
+and stitch them together like this:
+```js
+const bbox = Array(4);    // will be filled by actual values
+const features = stitch(
+    shpStream.pipeThrough(SHPTransform(bbox, prjwkt),
+    dbfStream.pipeThrough(DBFTransform(encoding)));
+```
+Now you can get the Features one by one:
+```js
+for await (const feature of features)
+    console.log(JSON.stringify(feature));
+```
 
 If the shapefiles (shp, dbf and prj) are local files,
 just use their paths to create input streams and call `stitch` like this:
@@ -45,12 +67,12 @@ const bbox = Array(4);             // will be filled with the actual values
 
 // these functions return TransformStreams
 const shpTransform = SHPTransform(bbox, prjwkt);
-const dbfTransform = DBFTransform(args.encoding);
+const dbfTransform = DBFTransform(encoding);
 
 // pipe the data into them and stitch them together
 const features = stitch(
-    shpstream.pipeThrough(shpTransform),
-    dbfstream.pipeThrough(dbfTransform));
+    shpStream.pipeThrough(shpTransform),
+    dbfStream.pipeThrough(dbfTransform));
 
 // now you can get the Features one by one
 for await (const feature of features)
