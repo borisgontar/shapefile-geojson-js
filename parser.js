@@ -6,7 +6,7 @@ import proj4 from 'proj4';
 import { parseRecord, parseHeader, dbfHeader, dbfField, dbfRecord } from './common.js';
 
 /**
- * Returns TransformStream of features converted from a SHP Readable.
+ * Returns TransformStream of features converted from a SHP ReadableStream.
  * @param {number[]} bbox Will fill with bounding box
  * @param {string?} prjwkt Projection in WKT format.
  * @returns TransformStream
@@ -20,7 +20,7 @@ export function SHPTransform(bbox, prjwkt = '') {
     let filesize = 0;
     let project = (x) => x;
     //
-    if (!Array.isArray(bbox) || bbox.length < 4)
+    if (bbox && !(Array.isArray(bbox) && bbox.length >= 4))
         throw new TypeError('SHPTransform: first arg: array for bbox expected.');
     if (prjwkt && typeof prjwkt != 'string')
         throw new TypeError('SHPTransform: second arg: string expected.');
@@ -46,8 +46,10 @@ export function SHPTransform(bbox, prjwkt = '') {
                 const data = new DataView(buffer);
                 if (status == 0) {
                     const header = parseHeader(buffer, project);
-                    for (let i = 0; i < 4; i++)
-                        bbox[i] = header.bbox[i];
+                    if (bbox) {
+                        for (let i = 0; i < 4; i++)
+                            bbox[i] = header.bbox[i];
+                    }
                     filesize = header.filesize - 100;
                     status = 1;
                     offset = 100;

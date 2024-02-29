@@ -1,4 +1,4 @@
-# shapefile-geojson-node
+# shapefile-geojson-js
 
 Streaming ESRI Shapefile parser.
 
@@ -11,15 +11,16 @@ If an accompanying stream in [dBASE](https://en.wikipedia.org/wiki/.dbf) format 
 it is used to populate feature properties.
 
 The module works both under Node.js and in the browser environment.
-It uses the [WHATWG streams](https://streams.spec.whatwg.org)
+It uses the [WHATWG streams](https://developer.mozilla.org/en-US/docs/Web/API/Streams_API)
 which were finalized in Node.js just recently (2024), so Node version 21
 is recommended.
 
-The generated GeoJSON is as valid as the source data.
-In particular the module relies on the correct winding order
-of polygon outer rings and holes.
-Shapefile records with null shape are transformed into
-features with null geometries.
+The generated GeoJSON reproduces the source data and is as valid as they are.
+There are two exceptions:
+* reprojecting to longitudes and latitudes
+may cause, for example, longitudes slighly bigger than 180
+* polygon inner ring, if its outer ring not found, may become
+an outer ring itself.
 
 For a command line converter, go [here](#command-line-tool).
 
@@ -27,10 +28,10 @@ For a command line converter, go [here](#command-line-tool).
 
 First, create ReadableStreams for your data:
 ```js
-const shpStream = get ReadableStream somehow;
-const dbfStream = get ReadableStream somehow;
+const shpStream = // get ReadableStream somehow;
+const dbfStream = // get ReadableStream somehow;
 ```
-Then you need to know the projection of coordinates stored in the SHP
+You need to know the projection of coordinates stored in the SHP
 data and encoding of the text fields of the DBF records:
 ```js
 const prjwkt = 'EPSG:3857';
@@ -39,6 +40,7 @@ const encoding = 'windows-1251';
 Pipe the data into the module's transform streams
 and stitch them together like this:
 ```js
+import { DBFTransform, SHPTransform, stitch } from 'shapefile-geojson-js';
 const bbox = Array(4);    // will be filled by actual values
 const features = stitch(
     shpStream.pipeThrough(SHPTransform(bbox, prjwkt),
@@ -49,44 +51,30 @@ Now you can get the Features one by one:
 for await (const feature of features)
     console.log(JSON.stringify(feature));
 ```
-
-If the shapefiles (shp, dbf and prj) are local files,
-just use their paths to create input streams and call `stitch` like this:
+If there is no DBF data, you can omit stitching:
 ```js
-import { createSHPStream } from 'shapefile-geojson-js';
-import { createReadStream, readFileSync } from 'node:fs';
+const features = shpStream.pipeThrough(SHPTransform(bbox, prjwkt);
+```
 
-// get ReadableStreams for local files
+Creating the ReadableStreams depends on your environment and on
+location of the data. In Node.js getting the data from local files
+looks like this:
+```js
+import { createReadStream, readFileSync } from 'node:fs';
 const shpStream = ReadableStream.from(createReadStream('path-to-file.shp'));
 const dbfstream = ReadableStream.from(createReadStream('path-to-file.dbf'));
-
-// load the projection information
 const prjwkt = readFileSync('path-to-file.prj', 'utf8');
-const encoding = 'windows-1252'    // or whatever the dbf texts are in
-const bbox = Array(4);             // will be filled with the actual values
-
-// these functions return TransformStreams
-const shpTransform = SHPTransform(bbox, prjwkt);
-const dbfTransform = DBFTransform(encoding);
-
-// pipe the data into them and stitch them together
-const features = stitch(
-    shpStream.pipeThrough(shpTransform),
-    dbfStream.pipeThrough(dbfTransform));
-
-// now you can get the Features one by one
-for await (const feature of features)
-    console.log(JSON.stringify(feature));
 ```
-As soon as `shpTransform` gets data from the pipe it fills
-`bbox` with the actual values.
-
-If there is no dbf (or it's not needed), read features directly
-from the first pipe:
+If the data is on the network, you can `fetch` it:
 ```js
-const features = shpstream.pipe(new SHPTransform(prjwkt));
-for await (let feature of features)
-    console.log(JSON.stringify(feature));
+const shpStream = await fetch('url-of-shp').then(res => res.body);
+```
+In the browser environment you need to get a `File` (or `Blob`) object representing
+the data. Let the user choose the files using the system file chooser
+(\<input type="file"\>) or handle the `ondrop` event to allow the user
+to drag and drop files into the window. Then:
+```js
+const shpStream = file.stream();   // file instanceof File
 ```
 
 ## Installation
@@ -97,54 +85,42 @@ npm install shapefile-geojson-js
 
 ## Usage
 
-The module exports two classes.
+The module exports three functions.
 
-Class **SHPTransform** is a
-[Transformer](https://nodejs.org/dist/latest-v21.x/docs/api/stream.html#class-streamtransform)
-stream which reads its input in the shapefile format and writes out
-GeoJSON Feature objects.
+Function  **SHPTransform** returns a TransformStream of features
+converted from a SHP ReadableStream. The writable side of this TransformStream
+gets GeoJSON Feature objects.
 ```js
-new SHPTransform(projection, options);
+SHPTransform(bbox, projection);
 ```
-* `projection` - the coordinate projection used in the shapefile. Should be
-a string in the projection WKT format (usually the contents of the
-accompanying .prj file) or a projection name like 'EPSG:3857'.
+* `bbox` - (optional) array to be filled by the bounding box of the entire
+FeatureCollection received from the data.
+* `projection` - (optional) the coordinate projection used in the shapefile.
+Should be a string in the projection WKT format
+(usually the contents of the accompanying .prj file)
+or a projection name like 'EPSG:3857'.
 See [PROJ4](https://github.com/proj4js/proj4js) for more information.
 If not specified, the coordinates are not altered.
 
-* `options` - additional options passed to the `Transform` constructor
-from `node:stream`. Usually not specified.
-
-This class is intended for use in a pipeline like this:
+This function is intended for use in a pipeline like this:
 ```js
-const stream = createReadStream('path-to-file.shp');
-const shapes = new SHPTransform(projection);
-for await (const feature of stream.pipe(shapes)) {
-    do-something(feature);
-}
+const shpStream = ReadableStream.from(createReadStream('path-to-file.shp'));
+shpStream.pipeThrough(SHPTransform(bbox, prjwkt))
 ```
-There is also a getter `SHPTransform.bbox` which returns the bounding box
-of all features of the shapefile. Note that it will not be available
-until at least one feature is read from the pipe.
 
-Class **DBFTransform** is a Transformer stream which reads its input in the
-[DBF](https://en.wikipedia.org/wiki/.dbf) format and writes out
-objects representing the table rows.
+Function **DBFTransform** returns a TransformStream of records
+converted from its input in the [DBF](https://en.wikipedia.org/wiki/.dbf) format
+and writes out objects representing the table rows.
 ```js
-new DBFTransform(encoding, options);
+DBFTransform(encoding);
 ```
 * `encoding` - name of encoding used in the text fields of the DBF records.
 By default 'latin1' is used.
-* `options` - additional options passed to the `Transform` constructor
-from `node:stream`. Usually not specified.
 
-This class is intended to use in the same way as the SHPTransform class.
+This function is intended to use in the same way as the SHPTransform.
 ```js
-const stream = createReadStream('path-to-file.dbf');
-const records = new DBFTransform();
-for await (const record of stream.pipe(records)) {
-    do-something(record);
-}
+const dbfStream = ReadableStream.from(createReadStream('path-to-file.dbf'));
+dbfStream.pipeThrough(DBFTransform(encoding))
 ```
 
 The module also exports an async generator function **stitch**
@@ -155,10 +131,8 @@ taken from the second one.
 ```js
 async function* stitch(shp, dbf);
 ```
-* `shp` - a read stream in the Shapefile format piped into a SHPTransform
-instance.
-* `dbf` - a read stream in the DBF format piped into a DBFTransform
-instance.
+* `shp` - a ReadableStream from the pipe into a SHP TransformStream.
+* `dbf` - a ReadableStream from the pipe into a DBF TransformStream.
 
 ## Command line tool
 
