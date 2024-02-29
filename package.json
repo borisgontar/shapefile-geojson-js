@@ -1,5 +1,5 @@
 {
-    "name": "shapefile-geojson-node",
+    "name": "shapefile-geojson-js",
     "version": "0.7.0",
     "description": "Streaming ESRI Shapefile parser",
     "main": "parser.js",
