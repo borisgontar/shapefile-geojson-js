@@ -15,11 +15,11 @@ It uses the [WHATWG streams](https://developer.mozilla.org/en-US/docs/Web/API/St
 which were finalized in Node.js just recently (2024), so Node version 21
 is recommended.
 
-The generated GeoJSON reproduces the source data and is as valid as they are.
+The generated GeoJSON reproduces the source data and is as valid as the data is.
 There are two exceptions:
-* reprojecting to longitudes and latitudes
-may cause, for example, longitudes slighly bigger than 180
-* polygon inner ring, if its outer ring not found, may become
+* Reprojecting to longitudes and latitudes
+may cause, for example, longitudes slighly bigger than 180.
+* Polygon inner ring, if its outer ring not found, will become
 an outer ring itself.
 
 For a command line converter, go [here](#command-line-tool).
@@ -34,8 +34,8 @@ const dbfStream = // get ReadableStream somehow;
 You need to know the projection of coordinates stored in the SHP
 data and encoding of the text fields of the DBF records:
 ```js
-const prjwkt = 'EPSG:3857';
-const encoding = 'windows-1251';
+const prjwkt = 'EPSG:3857';       // not needed if SHP has longitudes and latitudes
+const encoding = 'windows-1251';  // default is 'latin1'
 ```
 Pipe the data into the module's transform streams
 and stitch them together like this:
@@ -89,7 +89,7 @@ The module exports three functions.
 
 Function  **SHPTransform** returns a TransformStream of features
 converted from a SHP ReadableStream. The writable side of this TransformStream
-gets GeoJSON Feature objects.
+receives GeoJSON Feature objects.
 ```js
 SHPTransform(bbox, projection);
 ```
@@ -105,7 +105,7 @@ If not specified, the coordinates are not altered.
 This function is intended for use in a pipeline like this:
 ```js
 const shpStream = ReadableStream.from(createReadStream('path-to-file.shp'));
-shpStream.pipeThrough(SHPTransform(bbox, prjwkt))
+const features = shpStream.pipeThrough(SHPTransform(bbox, prjwkt));
 ```
 
 Function **DBFTransform** returns a TransformStream of records
@@ -117,10 +117,10 @@ DBFTransform(encoding);
 * `encoding` - name of encoding used in the text fields of the DBF records.
 By default 'latin1' is used.
 
-This function is intended to use in the same way as the SHPTransform.
+This function is intended to use the same way as the SHPTransform.
 ```js
 const dbfStream = ReadableStream.from(createReadStream('path-to-file.dbf'));
-dbfStream.pipeThrough(DBFTransform(encoding))
+const records = dbfStream.pipeThrough(DBFTransform(encoding));
 ```
 
 The module also exports an async generator function **stitch**
@@ -164,9 +164,9 @@ and limit the number of produced features.
 ## Notes
 
 * The module relies on correct winding order of polygon outer rings and holes
-in the source data. But there may by more than one outer ring
-and there is no other way to determine which hole belongs to which outer ring
-but to test them for intersection.
+in the source data. If there is more than one outer ring
+the module tries to determine which hole belongs to which outer ring
+by testing them for intersection.
 
 The resulting GeoJSON polygons follow the RFC7946 - exterior rings are
 counterclockwise and holes are clockwise.

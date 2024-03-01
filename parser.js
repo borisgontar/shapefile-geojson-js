@@ -3,7 +3,7 @@ if (TransformStream == undefined) {
     TransformStream = await import('node:stream/web');
 }
 import proj4 from 'proj4';
-import { parseRecord, parseHeader, dbfHeader, dbfField, dbfRecord } from './common.js';
+import { shpRecord, shpHeader, dbfHeader, dbfField, dbfRecord } from './common.js';
 
 /**
  * Returns TransformStream of features converted from a SHP ReadableStream.
@@ -45,7 +45,7 @@ export function SHPTransform(bbox, prjwkt = '') {
                     return;       // _transform will be called with the next chunk
                 const data = new DataView(buffer);
                 if (status == 0) {
-                    const header = parseHeader(buffer, project);
+                    const header = shpHeader(buffer, project);
                     if (bbox) {
                         for (let i = 0; i < 4; i++)
                             bbox[i] = header.bbox[i];
@@ -64,7 +64,7 @@ export function SHPTransform(bbox, prjwkt = '') {
                 }
                 else if (status == 2) {
                     // record contents
-                    controller.enqueue(parseRecord(buffer, offset, project));
+                    controller.enqueue(shpRecord(buffer, offset, project));
                     offset += needed;
                     filesize -= needed;
                     needed = 8;
@@ -166,7 +166,7 @@ export function DBFTransform(encoding) {
  * Stitches two ReadableStreams together and yields Feature objects.
  * @param {ReadableStream} shp
  * @param {ReadableStream} dbf
- * @returns {AsyncIterator<GeoJSON.Feature>}
+ * @returns {AsyncGenerator<GeoJSON.Feature>}
  */
 export async function* stitch(shp, dbf) {
     if (!(shp instanceof ReadableStream))

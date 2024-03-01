@@ -1,6 +1,6 @@
 /**
  * Checks if the first and last points are equal.
- * @param {number[][]} ring
+ * @param {GeoJSON.LineString} ring
  * @returns {boolean}
  */
 function ringClosed(ring) {
@@ -15,7 +15,7 @@ function ringClosed(ring) {
  * The area is positive if the ring is ordered counterclockwise.
  * Uses one of the formulas from
  * https://en.wikipedia.org/wiki/Shoelace_formula.
- * @param {number[][]} ring
+ * @param {GeoJSON.LineString} ring
  */
 function ringArea(ring) {
     const l = ring.length;
@@ -35,8 +35,8 @@ function ringArea(ring) {
  * The point is strictly inside if the number is odd.
  * The algorithm is taken from
  * https://web.archive.org/web/20130126163405/http://geomalgorithms.com/a03-_inclusion.html
- * @param {number[][]} ring
- * @param {number[]} p
+ * @param {GeoJSON.LineString} ring
+ * @param {GeoJSON.Point} p
  */
 function insideRing(p, ring) {
     let count = 0;
@@ -56,8 +56,8 @@ function insideRing(p, ring) {
 
 /**
  * A simple check if two rings intersect.
- * @param {number[][]} ring
- * @param {number[][]} hole
+ * @param {GeoJSON.LineString} ring
+ * @param {GeoJSON.LineString} hole
  */
 function ringIntersect(ring, b1, hole, b2) {
     const bb = bbox_intersection(b1, b2);
@@ -96,7 +96,7 @@ export function parseBBox(bytes, off, proj) {
  * @param {ArrayBuffer} bytes
  * @param {Function} proj;
  */
-export function parseHeader(bytes, proj) {
+export function shpHeader(bytes, proj) {
     const dv = new DataView(bytes);
     if (dv.getInt32(0) != 9994)
         throw new TypeError('Not a Shapefile format');
@@ -128,10 +128,8 @@ export function dbfField(bytes, pos, decoder) {
         return null;
     const name = decoder.decode(new DataView(bytes, pos, 11)).trim()
         .replace(/\0.*$/, '');
-    //const type = bytes.subarray(pos + 11, pos + 12).toString('ascii');
     const type = String.fromCharCode(dv.getUint8(pos + 11));
     const size = dv.getUint8(pos + 16);
-    //const count = dv.getUint8(pos + 17);
     return { name, type, size };
 }
 
@@ -187,7 +185,7 @@ export function dbfRecord(rec, fields, decoder) {
  * @param {number} offset
  * @returns {GeoJSON.Feature}
  */
-export function parseRecord(bytes, offset, proj) {
+export function shpRecord(bytes, offset, proj) {
     const dv = new DataView(bytes);
     const type = dv.getInt32(offset, true);
     switch (type) {
@@ -312,25 +310,6 @@ export function parseRecord(bytes, offset, proj) {
     }
 }
 
-/** @param {GeoJSON.BBox} b
-function bbox_valid(b) {
-    const [ w, s, e, n ] = b;
-    return w <= e && s <= n;
-}
- */
-/**
- * @param {GeoJSON.BBox} b1
- * @param {GeoJSON.BBox} b2
-
-function bbox_union(b1, b2) {
-    return [
-        Math.min(b1[0], b2[0]),
-        Math.min(b1[1], b2[1]),
-        Math.max(b1[2], b2[2]),
-        Math.max(b1[3], b2[3])
-    ];
-}
-*/
 /**
  * @param {GeoJSON.BBox} b1
  * @param {GeoJSON.BBox} b2

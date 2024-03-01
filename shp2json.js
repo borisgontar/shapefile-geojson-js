@@ -134,8 +134,8 @@ const bbox = Array(4);
 const shpTransform = SHPTransform(bbox, prjwkt);
 const dbfTransform = DBFTransform(args.encoding);
 
-const features = dbfstream
-    ? stitch(shpstream.pipeThrough(shpTransform), dbfstream.pipeThrough(dbfTransform))
+const features = dbfstream ?
+    stitch(shpstream.pipeThrough(shpTransform), dbfstream.pipeThrough(dbfTransform))
     : shpstream.pipeThrough(shpTransform);
 
 const nd = args.ndjson;
@@ -155,7 +155,6 @@ for await (const feature of features) {
             output.write(',\n');
     }
     first = false;
-    check(feature);
     output.write(JSON.stringify(feature, fmt));
     if (nd)
         output.write('\n');
@@ -183,14 +182,4 @@ function version() {
 function quit(msg) {
     console.error(msg);
     process.exit(1);
-}
-
-function check(ft) {
-    if (ft.bbox) {
-        let [w, s, e, n] = ft.bbox;
-        if (w < -180 || w > 180 || e < -180 || e > 180)
-            console.log(ft.properties);
-        if (s < -90 || s > 90 || n < -90 || n > 90)
-            console.log(ft.properties);
-    }
 }
