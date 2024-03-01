@@ -19,7 +19,7 @@ The generated GeoJSON reproduces the source data and is as valid as they are.
 There are two exceptions:
 * reprojecting to longitudes and latitudes
 may cause, for example, longitudes slighly bigger than 180
-* polygon inner ring, if its outer ring not found, may become
+* polygon inner ring, if its outer ring not found, will become
 an outer ring itself.
 
 For a command line converter, go [here](#command-line-tool).
@@ -137,7 +137,7 @@ async function* stitch(shp, dbf);
 ## Command line tool
 
 The project directory contains `shp2json.js`, a Node.js script to
-convert Shapefiles to GeoJSON. Run `./shp2json -h` to see its
+convert Shapefiles to GeoJSON. Run `./shp2json. js -h` to see its
 "usage" message:
 ```
   -i, --input      Path to input files (without extension)
