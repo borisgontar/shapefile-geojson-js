@@ -137,7 +137,7 @@ async function* stitch(shp, dbf);
 ## Command line tool
 
 The project directory contains `shp2json.js`, a Node.js script to
-convert Shapefiles to GeoJSON. Run `./shp2json -h` to see its
+convert Shapefiles to GeoJSON. Run `./shp2json. js -h` to see its
 "usage" message:
 ```
   -i, --input      Path to input files (without extension)
