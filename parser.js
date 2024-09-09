@@ -8,11 +8,12 @@ import { shpRecord, shpHeader, dbfHeader, dbfField, dbfRecord } from './common.j
 /**
  * Returns TransformStream of features converted from a SHP ReadableStream.
  * @param {number[]} bbox Will fill with bounding box
- * @param {string?} prjwkt Projection in WKT format.
+ * @param {string} [prjwkt] Projection in WKT format.
+ * @param {boolean} [withM] Include the M coordinate.
  * @returns TransformStream
  */
-export function SHPTransform(bbox, prjwkt = '') {
-    /** @type {ArrayBuffer} */
+export function SHPTransform(bbox, prjwkt = '', withM = false) {
+    /** @type {ArrayBuffer | null} */
     let buffer = null;
     let offset = 0;     // current offset in the buffer
     let needed = 100;   // number of bytes required in the buffer
@@ -39,7 +40,6 @@ export function SHPTransform(bbox, prjwkt = '') {
                 buffer = tmp.buffer;
                 offset = 0;
             }
-            // eslint-disable-next-line no-constant-condition
             while (true) {
                 if (buffer.byteLength - offset < needed)
                     return;       // _transform will be called with the next chunk
@@ -64,7 +64,7 @@ export function SHPTransform(bbox, prjwkt = '') {
                 }
                 else if (status == 2) {
                     // record contents
-                    controller.enqueue(shpRecord(buffer, offset, project));
+                    controller.enqueue(shpRecord(buffer, offset, project, withM));
                     offset += needed;
                     filesize -= needed;
                     needed = 8;
@@ -86,7 +86,7 @@ export function SHPTransform(bbox, prjwkt = '') {
  * @returns TransformStream
  */
 export function DBFTransform(encoding) {
-    /** @type {ArrayBuffer} */
+    /** @type {ArrayBuffer | null} */
     let buffer = null;
     let offset = 0;     // current offset in the buffer
     let needed = 32;    // number of bytes required in the buffer
@@ -114,12 +114,11 @@ export function DBFTransform(encoding) {
                 buffer = tmp.buffer;
                 offset = 0;
             }
-            // eslint-disable-next-line no-constant-condition
             while (true) {
                 if (buffer.byteLength - offset < needed)
                     return;       // transform will be called with the next chunk
                 if (status == 0) {
-                const header = dbfHeader(buffer);
+                    const header = dbfHeader(buffer);
                     numrec = header.numrec;
                     reclen = header.reclen;
                     offset = 32;

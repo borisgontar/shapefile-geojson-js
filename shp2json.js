@@ -19,6 +19,7 @@ Options:
       --encoding   Text fields enconding in DBF file, latin1 by default
       --limit      Max number of features to accept, skip the rest
       --start      Number of features to skip at the beginnning
+      --withM      Do not ignore the 'M' values
   -h, --help       Show this help and exit
       --version    Show version number and exit
 `;
@@ -34,6 +35,7 @@ const { args } = (() => {
                 encoding: { type: 'string' },
                 limit: { type: 'string' },
                 start: { type: 'string' },
+                withM: { type: 'boolean', default: false },
                 help: { type: 'boolean', short: 'h' },
                 version: { type: 'boolean' }
             },
@@ -131,7 +133,7 @@ const prjwkt = (() => {
 })();
 
 const bbox = Array(4);
-const shpTransform = SHPTransform(bbox, prjwkt);
+const shpTransform = SHPTransform(bbox, prjwkt, args.withM);
 const dbfTransform = DBFTransform(args.encoding);
 
 const features = dbfstream ?

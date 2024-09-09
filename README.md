@@ -43,7 +43,7 @@ and stitch them together like this:
 import { DBFTransform, SHPTransform, stitch } from 'shapefile-geojson-js';
 const bbox = Array(4);    // will be filled by actual values
 const features = stitch(
-    shpStream.pipeThrough(SHPTransform(bbox, prjwkt),
+    shpStream.pipeThrough(SHPTransform(bbox, prjwkt)),
     dbfStream.pipeThrough(DBFTransform(encoding)));
 ```
 Now you can get the Features one by one:
@@ -91,7 +91,7 @@ Function  **SHPTransform** returns a TransformStream of features
 converted from a SHP ReadableStream. The writable side of this TransformStream
 receives GeoJSON Feature objects.
 ```js
-SHPTransform(bbox, projection);
+SHPTransform(bbox, projection, withM);
 ```
 * `bbox` - (optional) array to be filled by the bounding box of the entire
 FeatureCollection received from the data.
@@ -101,6 +101,8 @@ Should be a string in the projection WKT format
 or a projection name like 'EPSG:3857'.
 See [PROJ4](https://github.com/proj4js/proj4js) for more information.
 If not specified, the coordinates are not altered.
+* `withM` - (optional) if `true`, the 'M' values from the corresponding
+record types are added to the coordinates. By default they are ignored.
 
 This function is intended for use in a pipeline like this:
 ```js
@@ -137,7 +139,7 @@ async function* stitch(shp, dbf);
 ## Command line tool
 
 The project directory contains `shp2json.js`, a Node.js script to
-convert Shapefiles to GeoJSON. Run `./shp2json. js -h` to see its
+convert Shapefiles to GeoJSON. Run `./shp2json.js -h` to see its
 "usage" message:
 ```
   -i, --input      Path to input files (without extension)
@@ -147,6 +149,7 @@ convert Shapefiles to GeoJSON. Run `./shp2json. js -h` to see its
       --encoding   Text fields enconding in DBF file, latin1 by default
       --limit      Max number of features to accept, skip the rest
       --start      Number of features to skip at the beginnning
+      --withM      Do not ignore the 'M' values
   -h, --help       Show this help and exit
       --version    Show version number and exit
 ```
@@ -167,24 +170,24 @@ and limit the number of produced features.
 in the source data. If there is more than one outer ring
 the module tries to determine which hole belongs to which outer ring
 by testing them for intersection.
-
 The resulting GeoJSON polygons follow the RFC7946 - exterior rings are
 counterclockwise and holes are clockwise.
 
 * Shapefile records with no coordinates are presented as
-```js
-{ type: 'Feature', geometry: null }
-```
+`{ type: 'Feature', geometry: null }`
 
 * When parsing DBF, numeric fields with empty or non-numeric contents
 are presented as `null`. Logical fields with contents [YyTt]
 are presented as `true`, with [NnFf] - as `false`, otherwise as `null`.
 
-* Shapefile records of 'Z' and 'M' types are not implemented.
+* Shapefile records of type MultiPatch are not implemented.
 
 * Only dBase format level 5 without encryption is implemented.
 
 * This module's functions will throw a `TypeError` if used incorrectly
 (e.g. the first parameter of createSHPStream is not a Readable)
 or if the streams are not in the correct format. If the generic
-`Error` is thrown it's most probably a bug.
+`Error` is thrown it's either a bug or an exception in the underlying
+`proj4` module.
+
+---

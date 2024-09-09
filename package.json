@@ -1,12 +1,11 @@
 {
     "name": "shapefile-geojson-js",
-    "version": "0.7.0",
+    "version": "0.8.0",
     "description": "Streaming ESRI Shapefile parser",
     "main": "parser.js",
     "type": "module",
     "typings": "index.d.ts",
     "scripts": {
-        "dev": "vite",
         "test": "echo \"Error: no test specified\" && exit 1"
     },
     "keywords": [
@@ -21,12 +20,12 @@
     "author": "Boris Gontar",
     "license": "MIT",
     "dependencies": {
-        "proj4": "^2.10.0"
+        "proj4": "^2.12.1"
     },
     "devDependencies": {
         "@types/geojson": "^7946.0.14",
         "@types/node": "^20.11.19",
-        "eslint": "^8.56.0"
+        "eslint": "^9.10.0"
     },
     "repository": {
         "type": "git",

@@ -1,6 +1,6 @@
 /**
  * Checks if the first and last points are equal.
- * @param {GeoJSON.LineString} ring
+ * @param {GeoJSON.Position[]} ring
  * @returns {boolean}
  */
 function ringClosed(ring) {
@@ -15,7 +15,7 @@ function ringClosed(ring) {
  * The area is positive if the ring is ordered counterclockwise.
  * Uses one of the formulas from
  * https://en.wikipedia.org/wiki/Shoelace_formula.
- * @param {GeoJSON.LineString} ring
+ * @param {GeoJSON.Position[]} ring
  */
 function ringArea(ring) {
     const l = ring.length;
@@ -35,8 +35,8 @@ function ringArea(ring) {
  * The point is strictly inside if the number is odd.
  * The algorithm is taken from
  * https://web.archive.org/web/20130126163405/http://geomalgorithms.com/a03-_inclusion.html
- * @param {GeoJSON.LineString} ring
- * @param {GeoJSON.Point} p
+ * @param {GeoJSON.Position[]} ring
+ * @param {GeoJSON.Position} p
  */
 function insideRing(p, ring) {
     let count = 0;
@@ -56,8 +56,10 @@ function insideRing(p, ring) {
 
 /**
  * A simple check if two rings intersect.
- * @param {GeoJSON.LineString} ring
- * @param {GeoJSON.LineString} hole
+ * @param {GeoJSON.Position[]} ring
+ * @param {GeoJSON.Position[]} hole
+ * @param {GeoJSON.BBox} b1
+ * @param {GeoJSON.BBox} b2
  */
 function ringIntersect(ring, b1, hole, b2) {
     const bb = bbox_intersection(b1, b2);
@@ -84,6 +86,7 @@ function ringIntersect(ring, b1, hole, b2) {
  * @param {ArrayBuffer} bytes
  * @param {number} off
  * @param {Function} proj;
+ * @returns {GeoJSON.BBox}
  */
 export function parseBBox(bytes, off, proj) {
     const dv = new DataView(bytes);
@@ -121,6 +124,7 @@ export function dbfHeader(bytes) {
 /**
  * @param {ArrayBuffer} bytes
  * @param {number} pos
+ * @param {TextDecoder} decoder
  */
 export function dbfField(bytes, pos, decoder) {
     const dv = new DataView(bytes);
@@ -133,7 +137,11 @@ export function dbfField(bytes, pos, decoder) {
     return { name, type, size };
 }
 
-/** @param {DataView} rec */
+/**
+ * @param {DataView} rec
+ * @param {Array} fields
+ * @param {TextDecoder} decoder
+ */
 export function dbfRecord(rec, fields, decoder) {
     const row = {};
     let pos = 0;
@@ -183,37 +191,61 @@ export function dbfRecord(rec, fields, decoder) {
 /**
  * @param {ArrayBuffer} bytes
  * @param {number} offset
+ * @param {Function} proj
+ * @param {boolean} withM
  * @returns {GeoJSON.Feature}
  */
-export function shpRecord(bytes, offset, proj) {
+export function shpRecord(bytes, offset, proj, withM) {
     const dv = new DataView(bytes);
     const type = dv.getInt32(offset, true);
     switch (type) {
         case 0:
             return { type: 'Feature', geometry: null, properties: null };
-        case 1: { // Point
-            const [x, y] = proj([
+        case 1:     // Point
+        case 11:    // PointZ
+        case 21: {  // PointM
+            const coords = [
                 dv.getFloat64(offset + 4, true),
-                dv.getFloat64(offset + 12, true)]);
+                dv.getFloat64(offset + 12, true)
+            ];
+            if (type == 11 || (type == 21 && withM))
+                coords.push(dv.getFloat64(offset + 20, true));
+            if (type == 11 && withM)
+                coords.push(dv.getFloat64(offset + 28, true));
             return {
                 type: 'Feature',
-                geometry: { type: 'Point', coordinates: [x, y] },
+                geometry: { type: 'Point', coordinates: proj(coords) },
                 properties: null
             };
         }
         case 3:     // Polyline
+        case 13:    // PolylineZ
+        case 23:    // PolylineM
+        case 15:    // PolygonZ
+        case 25:    // PolygonM
         case 5: {   // Polygon
             const bbox = parseBBox(bytes, offset + 4, proj);
             const nparts = dv.getInt32(offset + 36, true);
             const npoints = dv.getInt32(offset + 40, true);
             const parts = Array(nparts);
+            /** @type {GeoJSON.Position[]} */
             const points = Array(npoints);
+            const pushD = () => {
+                bbox.push(dv.getFloat64(pos, true));
+                pos += 8;
+                bbox.push(dv.getFloat64(pos, true));
+                pos += 8;
+                for (let i = 0; i < npoints; i++) {
+                    points[i].push(dv.getFloat64(pos, true));
+                    pos += 8;
+                }
+            }
+            //
             let pos = offset + 44;
             for (let i = 0; i < nparts; i++) {
                 parts[i] = dv.getInt32(pos, true);
                 pos += 4;
             }
-            const lines = Array(nparts);
             for (let i = 0; i < npoints; i++) {
                 const x = dv.getFloat64(pos, true);
                 pos += 8;
@@ -221,12 +253,21 @@ export function shpRecord(bytes, offset, proj) {
                 pos += 8;
                 points[i] = proj([x, y]);
             }
+            if (type == 13 || type == 15) {
+                pushD();
+                if (withM)
+                    pushD();
+            }
+            if ((type == 23 || type == 25) && withM)
+                pushD();
+            /** @type {GeoJSON.Position[][]} */
+            const lines = Array(nparts);
             for (let i = 0; i < nparts; i++) {
                 const i0 = parts[i];
                 const i1 = i < nparts - 1 ? parts[i + 1] : npoints;
                 lines[i] = points.slice(i0, i1);
             }
-            if (type == 3) {
+            if (type == 3 || type == 13 || type == 23) {
                 return {
                     type: 'Feature',
                     bbox: bbox,
@@ -279,6 +320,7 @@ export function shpRecord(bytes, offset, proj) {
                 if (h)
                     h.outer.ring.push(h.ring.reverse());
             }
+            /** @type {GeoJSON.Geometry} */
             const geometry = {
                 type: outers.length == 1 ? 'Polygon' : 'MultiPolygon',
                 coordinates: outers.length == 1 ? outers[0].ring
@@ -286,10 +328,23 @@ export function shpRecord(bytes, offset, proj) {
             }
             return { type: 'Feature', bbox: bbox, geometry, properties: null };
         }
+        case 28:   // MultiPointM
+        case 18:   // MultiPointZ
         case 8: {  // MultiPoint
             const bbox = parseBBox(bytes, offset + 4, proj);
             const num = dv.getInt32(offset + 36, true);
             const points = Array(num);
+            const pushD = () => {
+                bbox.push(dv.getFloat64(pos, true));
+                pos += 8;
+                bbox.push(dv.getFloat64(pos, true));
+                pos += 8;
+                for (let i = 0; i < num; i++) {
+                    points[i].push(dv.getFloat64(pos, true));
+                    pos += 8;
+                }
+            }
+            //
             let pos = offset + 40;
             for (let i = 0; i < num; i++) {
                 const x = dv.getFloat64(pos, true);
@@ -298,6 +353,13 @@ export function shpRecord(bytes, offset, proj) {
                 pos += 8;
                 points[i] = proj([x, y]);
             }
+            if (type == 18) {
+                pushD();
+                if (withM)
+                    pushD();
+            }
+            if (type == 28 && withM)
+                pushD();
             return {
                 type: 'Feature',
                 bbox: bbox,
@@ -313,6 +375,7 @@ export function shpRecord(bytes, offset, proj) {
 /**
  * @param {GeoJSON.BBox} b1
  * @param {GeoJSON.BBox} b2
+ * @returns {GeoJSON.BBox | null}
  */
 function bbox_intersection(b1, b2) {
     const [w1, s1, e1, n1] = b1;
@@ -326,7 +389,10 @@ function bbox_intersection(b1, b2) {
     return [w, s, e, n];
 }
 
-/** @param {GeoJSON.LineString} line */
+/**
+ * @param {GeoJSON.Position[]} line
+ * @returns {GeoJSON.BBox}
+ */
 function bbox_of(line) {
     let w = Number.MAX_SAFE_INTEGER,
         s = Number.MAX_SAFE_INTEGER,
@@ -345,7 +411,7 @@ function bbox_of(line) {
 /**
  * Is this point within bbox, borders included?
  * @param {GeoJSON.BBox} b
- * @param {GeoJSON.Point} p
+ * @param {GeoJSON.Position} p
  */
 function bbox_contains(b, p) {
     const [w, s, e, n] = b;
